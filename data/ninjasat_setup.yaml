@@ -1,0 +1,5 @@
+tle_file: "data/iss.tle"
+tle_name: "ISS"
+ground_station_longitude_deg: 25.2797
+ground_station_latitude_deg: 54.6872
+ground_station_altitude_m: 112
