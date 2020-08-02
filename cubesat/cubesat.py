@@ -13,7 +13,6 @@ import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 #from mpl_toolkits.basemap import Basemap
 
-
 COLUMN_KEYWORDS = ['utc_time','longitude_deg','latitude_deg','altitude_km','sun_elevation_deg','sat_elevation_deg','sat_azimuth_deg']
 
 class CubeSat():
@@ -36,6 +35,9 @@ class CubeSat():
 		self.track_dict = {}
 		for keyword in COLUMN_KEYWORDS:
 			self.track_dict[keyword] = []
+
+		self.set_hvoff_region()
+		exit()
 
 	def get_position(self,utc_time):
 		"""
@@ -65,7 +67,7 @@ class CubeSat():
 
 	def append_ro_track(self,utc_time):
 		for keyword in COLUMN_KEYWORDS:
-			if keyword is 'utc_time':
+			if keyword == 'utc_time':
 				self.track_dict['utc_time'].append(utc_time)
 			else:
 				self.track_dict[keyword].append(getattr(self, keyword))
@@ -105,16 +107,23 @@ class CubeSat():
 		ax.stock_img()
 		ax.coastlines(resolution='110m')
 
-		gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True,
-			linewidth=2, color='gray', alpha=0.5, linestyle='--')
-		#gl.xlabels_bottom = False
-		#gl.ylabels_left = False
-		#gl.xlines = False
-		#gl.xlocator = mticker.FixedLocator([-180, -45, 0, 45, 180])
+		plt.title("TLE:%s Date:%s to %s" % (
+			self.param["tle_name"],
+			start_date_utc.strftime('%Y-%m-%d-%H:%M:%S'),
+			end_date_utc.strftime('%Y-%m-%d-%H:%M:%S')))
+
+		gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=False,
+			linewidth=1, color='gray', alpha=0.3, linestyle='--')
 		#gl.xformatter = LONGITUDE_FORMATTER
 		#gl.yformatter = LATITUDE_FORMATTER
 		#gl.xlabel_style = {'size': 15, 'color': 'gray'}
 		#gl.xlabel_style = {'color': 'red', 'weight': 'bold'}
+		ax.set_xlim(-180.0,180.0)
+		ax.set_ylim(-90.0,90.0)		
+		ax.set_xlabel('Longitude (deg)')
+		ax.set_ylabel('Latitude (deg)')		
+		ax.set_xticks([-180,-120,-60,0,60,120,180])
+		ax.set_yticks([-90,-60,-30,0,30,60,90])	
 
 		ax.plot(
 			self.df["longitude_deg"][self.df["sun_elevation_deg"]>=0.0],
@@ -132,16 +141,37 @@ class CubeSat():
 			self.param['ground_station_longitude_deg'],
 			self.param['ground_station_latitude_deg'],
 			"*",markersize=20,color='r')	
-		plt.title("TLE:%s Date:%s to %s" % (
-			self.param["tle_name"],
-			start_date_utc.strftime('%Y-%m-%d-%H:%M:%S'),
-			end_date_utc.strftime('%Y-%m-%d-%H:%M:%S')))
-		ax.set_xlim(-180.0,180.0)
-		ax.set_ylim(-90.0,90.0)			
 
+		"""
+		lons, lats, data = self.sample_data()
+		#ax.contourf(lons, lats, data,
+		#	transform=ccrs.PlateCarree(),
+		#	cmap='nipy_spectral')
+		ax.contour(lons, lats, data,
+			levels=5, colors=['black'],
+			transform=ccrs.PlateCarree())
+		#	cmap='nipy_spectral')
+		"""
 		plt.savefig("%s.pdf" % foutname_base,bbox_inches='tight')
 
+	def sample_data(self,shape=(73, 145)):
+		"""Return ``lons``, ``lats`` and ``data`` of some fake data."""
+		nlats, nlons = shape
+		lats = np.linspace(-np.pi / 2, np.pi / 2, nlats)
+		lons = np.linspace(0, 2 * np.pi, nlons)
+		lons, lats = np.meshgrid(lons, lats)
+		wave = 0.75 * (np.sin(2 * lats) ** 8) * np.cos(4 * lons)
+		mean = 0.5 * np.cos(2 * lats) * ((np.sin(2 * lats)) ** 2 + 2)
 
+		lats = np.rad2deg(lats)
+		lons = np.rad2deg(lons)
+		data = wave + mean
+
+		return lons, lats, data
+
+	def set_hvoff_region(self):
+		# https://numpy.org/doc/stable/reference/generated/numpy.histogram2d.html
+		open(self.param["lookuptable_hvoff"])
 
 
 
