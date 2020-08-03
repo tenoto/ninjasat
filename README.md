@@ -65,5 +65,5 @@ brew install geos
 - lookuptable_hvoff.csv: GMC の HV を off する想定の領域を指定
 
 ## Change Log 
-
+- 2020-08-04: Cutoff rigidity is included. 
 - 2020-08-03: first version was uplaoded.

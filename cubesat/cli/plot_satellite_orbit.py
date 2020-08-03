@@ -6,7 +6,8 @@ import argparse
 from cubesat.cubesat import CubeSat
 
 __author__ = 'Teruaki Enoto'
-__version__ = '0.01'
+__version__ = '0.02'
+# v0.02 : 2020-08-02 : COR map added.
 # v0.01 : 2020-08-01 : original version
 
 def get_parser():
@@ -39,6 +40,7 @@ def main(args=None):
 	args = parser.parse_args(args)
 
 	ninjasat = CubeSat(setup_yamlfile=args.setup_yamlfile)
+	ninjasat.plot_cutoff_rigidity_map()		
 	ninjasat.plot_orbit(
 		start_date_utc=args.start,
 		end_date_utc=args.end,

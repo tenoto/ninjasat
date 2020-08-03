@@ -13,7 +13,7 @@ import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 #from mpl_toolkits.basemap import Basemap
 
-COLUMN_KEYWORDS = ['utc_time','longitude_deg','latitude_deg','altitude_km','sun_elevation_deg','sat_elevation_deg','sat_azimuth_deg']
+COLUMN_KEYWORDS = ['utc_time','longitude_deg','latitude_deg','altitude_km','sun_elevation_deg','sat_elevation_deg','sat_azimuth_deg','cutoff_rigidity_GV']
 
 class CubeSat():
 	def __init__(self,setup_yamlfile):
@@ -36,8 +36,8 @@ class CubeSat():
 		for keyword in COLUMN_KEYWORDS:
 			self.track_dict[keyword] = []
 
-		self.set_hvoff_region()
-		exit()
+		self.set_cutoff_rigidity_map()
+		#self.set_hvoff_region()
 
 	def get_position(self,utc_time):
 		"""
@@ -61,6 +61,9 @@ class CubeSat():
 			self.param['ground_station_longitude_deg'],
 			self.param['ground_station_latitude_deg'],
 			self.param['ground_station_altitude_m'])
+
+		# get cutoff rigidity
+		self.cutoff_rigidity_GV = self.get_cutoff_rigidity(longitude_deg=self.longitude_deg,latitude_deg=self.latitude_deg)
 
 		# add to track
 		self.append_ro_track(utc_time)
@@ -142,32 +145,82 @@ class CubeSat():
 			self.param['ground_station_latitude_deg'],
 			"*",markersize=20,color='r')	
 
-		"""
-		lons, lats, data = self.sample_data()
-		#ax.contourf(lons, lats, data,
-		#	transform=ccrs.PlateCarree(),
-		#	cmap='nipy_spectral')
-		ax.contour(lons, lats, data,
-			levels=5, colors=['black'],
+		cormap_contour = ax.contour(
+			self.cormap_longitude_centers, 
+			self.cormap_latitude_centers, 
+			self.cutoff_rigidity_map_T,
+			levels=6, colors=['gray'], linewidths=1.2, 
 			transform=ccrs.PlateCarree())
-		#	cmap='nipy_spectral')
-		"""
+		cormap_contour.clabel(fmt='%1.1f', fontsize=12)
+
 		plt.savefig("%s.pdf" % foutname_base,bbox_inches='tight')
 
-	def sample_data(self,shape=(73, 145)):
-		"""Return ``lons``, ``lats`` and ``data`` of some fake data."""
-		nlats, nlons = shape
-		lats = np.linspace(-np.pi / 2, np.pi / 2, nlats)
-		lons = np.linspace(0, 2 * np.pi, nlons)
-		lons, lats = np.meshgrid(lons, lats)
-		wave = 0.75 * (np.sin(2 * lats) ** 8) * np.cos(4 * lons)
-		mean = 0.5 * np.cos(2 * lats) * ((np.sin(2 * lats)) ** 2 + 2)
+	def set_cutoff_rigidity_map(self):
+		print("--set_cutoff_rigidity_map")
+		print('file_cutoffrigidity: {}'.format(self.param['file_cutoffrigidity']))
 
-		lats = np.rad2deg(lats)
-		lons = np.rad2deg(lons)
-		data = wave + mean
+		self.df_cor = pd.read_csv(self.param['file_cutoffrigidity'],
+			skiprows=1,delim_whitespace=True,
+			names=['latitude_deg','longitude_deg','cutoff_rigidity'],
+			dtype={'latitude_deg':'float64','longitude_deg':'float64','cutoff_rigidity':'float64'})
+		self.cutoff_rigidity_map, self.cormap_longitude_edges, self.cormap_latitude_edges = np.histogram2d([],[],
+			bins=[self.param["cormap_lon_nbin"],self.param["cormap_lat_nbin"]],
+			range=[[-180.,180.],[-90.,90.]])	
+		self.df_cor["longitude_index"] = np.digitize(self.df_cor['longitude_deg'], self.cormap_longitude_edges)
+		self.df_cor["longitude_index"] = pd.to_numeric(self.df_cor["longitude_index"],downcast='signed')
+		self.df_cor["latitude_index"] = np.digitize(self.df_cor['latitude_deg'], self.cormap_latitude_edges)
+		self.df_cor["latitude_index"] = pd.to_numeric(self.df_cor["latitude_index"],downcast='signed')		
+		"""
+		H: two dimentional matrix 
+		x: longitude
+		y: latitude 
+		
+		H[0][2]		...
+		H[0][1]		H[1][1]		...
+		H[0][0]		H[1][0]		...		
+		"""
 
-		return lons, lats, data
+		for index, row in self.df_cor.iterrows():
+			i = int(row['longitude_index'])-1
+			j = int(row['latitude_index'])-1		
+			self.cutoff_rigidity_map[i][j] = row['cutoff_rigidity']
+
+		self.cutoff_rigidity_map_T = self.cutoff_rigidity_map.T 
+		self.cormap_longitude_centers = (self.cormap_longitude_edges[:-1] + self.cormap_longitude_edges[1:]) / 2.
+		self.cormap_latitude_centers = (self.cormap_latitude_edges[:-1] + self.cormap_latitude_edges[1:]) / 2.
+
+	def plot_cutoff_rigidity_map(self,foutname_base='cormap'):
+
+		fig = plt.figure(figsize=(12,8))
+		ax = plt.axes(projection=ccrs.PlateCarree())	
+		ax.stock_img()
+		ax.coastlines(resolution='110m')		
+
+		gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=False,
+			linewidth=1, color='gray', alpha=0.3, linestyle='--')
+		ax.set_xlim(-180.0,180.0)
+		ax.set_ylim(-90.0,90.0)		
+		ax.set_xlabel('Longitude (deg)')
+		ax.set_ylabel('Latitude (deg)')		
+		ax.set_xticks([-180,-120,-60,0,60,120,180])
+		ax.set_yticks([-90,-60,-30,0,30,60,90])	
+
+		X, Y = np.meshgrid(self.cormap_longitude_edges, self.cormap_latitude_edges)
+		ax.pcolormesh(X, Y, self.cutoff_rigidity_map_T)
+
+		cormap_contour = ax.contour(
+			self.cormap_longitude_centers, 
+			self.cormap_latitude_centers, 
+			self.cutoff_rigidity_map_T,
+			levels=10, colors=['black'],
+			transform=ccrs.PlateCarree())
+		cormap_contour.clabel(fmt='%1.1f', fontsize=12)
+		plt.savefig("%s.pdf" % foutname_base,bbox_inches='tight')
+
+	def get_cutoff_rigidity(self,longitude_deg,latitude_deg):
+		i = int(np.digitize(longitude_deg, self.cormap_longitude_edges)) - 1
+		j = int(np.digitize(latitude_deg, self.cormap_latitude_edges)) - 1		
+		return(self.cutoff_rigidity_map[i][j])
 
 	def set_hvoff_region(self):
 		# https://numpy.org/doc/stable/reference/generated/numpy.histogram2d.html
