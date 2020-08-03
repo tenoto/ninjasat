@@ -5,7 +5,7 @@ NinjaSat の衛星運用の様子を把握するために作成しているラ�
 
 ## Required libraries
 
-標準的なライブラリの他に、以下のライブラリが必要になる。いずれも pip install xxx でインストールできるはず。ただし、cartopy を動かすには、予め
+標準的なライブラリの他に、以下のライブラリが必要になる。いずれも pip install library でインストールできるはず。ただし、cartopy を動かすには、予め
 
 ```
 brew install proj
@@ -15,7 +15,7 @@ brew install geos
 の 2つのライブラリを入れておく必要がある。
 
 - pyorbital: https://pypi.org/project/orbit-predictor/
-- cartopy: 
+- cartopy: https://scitools.org.uk/cartopy/docs/latest/
 
 ```
 %> pip install pyorbital 
@@ -29,15 +29,34 @@ brew install geos
 %> source setenv/setenv.bashrc    
 ```
 
-## Directory structure 
+## Directory structure
 
-
+ディレクトリ構造は以下の通り。 
+```
+./
+├── README.md
+├── cubesat
+│   ├── __init__.py (ライブラリ化するために必要...と理解している)
+│   ├── cli
+│   │   └── plot_satellite_orbit.py (コマンドラインで最初と最後の時刻で軌道の様子をプロット)
+│   └── cubesat.py (各種の関数などが入ったライブラリ本体)
+├── data
+│   ├── iss.tle (ISS 軌道の TLE ファイル)
+│   ├── lookuptable_hvoff.csv (HV を OFF にするマップ)
+│   └── ninjasat_setup.yaml (NinjaSat の各種のパラメータを記載している)
+├── setenv
+│   └── setenv.bashrc (ライブラリとして読み込むための初期設定ファイル)
+└── tests (コマンドラインの例をいれたスクリプト集)
+    ├── ninjasat_orbit.pdf
+    └── plot_ninjasat_orbit.sh
+```
 
 ## How to use 
 
 ```
-tests/plot_ninjasat_orbit.sh 
+%> tests/plot_ninjasat_orbit.sh 
 ```
+をすると、ninjasat_orbit.pdf というファイルが作成されるはず。
 
 ## Files in the "data" directory
 
