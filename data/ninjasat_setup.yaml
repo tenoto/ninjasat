@@ -4,3 +4,7 @@ ground_station_longitude_deg: 25.2797
 ground_station_latitude_deg: 54.6872
 ground_station_altitude_m: 112
 lookuptable_hvoff: "data/lookuptable_hvoff.csv"
+file_cutoffrigidity: "data/cor/cutrig-170312a400kp3.dat"
+cormap_lon_nbin: 72
+cormap_lat_nbin: 36
+maxi_rbm_directory: "/Users/enoto/Dropbox/01_enoto/research/ninjasat/useful_email/200803_Nakahira_MAXIRBM/rbmmap_dst"

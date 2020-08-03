@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 
+import os
+import yaml 
+import glob
+import ephem
+import datetime
 import numpy as np
 import pandas as pd
-import yaml 
-import datetime
-import ephem
 
 from pyorbital.orbital import Orbital
 from pyorbital.tlefile import Tle
@@ -221,6 +223,22 @@ class CubeSat():
 		i = int(np.digitize(longitude_deg, self.cormap_longitude_edges)) - 1
 		j = int(np.digitize(latitude_deg, self.cormap_latitude_edges)) - 1		
 		return(self.cutoff_rigidity_map[i][j])
+
+	def set_maxi_rbm_rate(self):
+		self.maxi_rbm_rate_lst = {}
+		print("maxi_rbm_directory: {}".format(self.param["maxi_rbm_directory"]))
+		for dstfile in glob.glob('%s/dst*.npy' % self.param["maxi_rbm_directory"]):
+			basename = os.path.splitext(os.path.basename(dstfile))[0]
+			print('reading ... {}'.format(basename))
+			self.maxi_rbm_rate_lst[basename] = np.load(dstfile)
+		print(self.maxi_rbm_rate_lst)
+		#healpix(ring,nside=16)
+
+		fig = plt.figure(figsize=(12,8))
+		ax = plt.axes(projection=ccrs.PlateCarree())
+		ax.plot(self.maxi_rbm_rate_lst['dst_h_-223--51'])
+		plt.savefig("maxi_rbm.pdf",bbox_inches='tight')
+
 
 	def set_hvoff_region(self):
 		# https://numpy.org/doc/stable/reference/generated/numpy.histogram2d.html
