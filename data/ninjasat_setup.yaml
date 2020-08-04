@@ -8,3 +8,5 @@ file_cutoffrigidity: "data/cor/cutrig-170312a400kp3.dat"
 cormap_lon_nbin: 72
 cormap_lat_nbin: 36
 maxi_rbm_directory: "/Users/enoto/Dropbox/01_enoto/research/ninjasat/useful_email/200803_Nakahira_MAXIRBM/rbmmap_dst"
+maxi_rbm_selected_basename: "dst_h_-223--51"
+hv_allowed_maxi_rbm_threshold: 10.0

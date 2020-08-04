@@ -7,15 +7,18 @@ import ephem
 import datetime
 import numpy as np
 import pandas as pd
+import healpy as hp
 
 from pyorbital.orbital import Orbital
 from pyorbital.tlefile import Tle
 
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
-#from mpl_toolkits.basemap import Basemap
+from matplotlib.colors import LogNorm
+import matplotlib.dates as mdates
 
-COLUMN_KEYWORDS = ['utc_time','longitude_deg','latitude_deg','altitude_km','sun_elevation_deg','sat_elevation_deg','sat_azimuth_deg','cutoff_rigidity_GV']
+COLUMN_KEYWORDS = ['utc_time','longitude_deg','latitude_deg','altitude_km','sun_elevation_deg','sat_elevation_deg','sat_azimuth_deg','cutoff_rigidity_GV',
+	'maxi_rbm_rate_cps','hv_allowed_flag']
 
 class CubeSat():
 	def __init__(self,setup_yamlfile):
@@ -66,6 +69,15 @@ class CubeSat():
 
 		# get cutoff rigidity
 		self.cutoff_rigidity_GV = self.get_cutoff_rigidity(longitude_deg=self.longitude_deg,latitude_deg=self.latitude_deg)
+
+		# MAXI rate
+		self.maxi_rbm_rate_cps = self.get_maxi_rbm_rate(self.longitude_deg,self.latitude_deg)
+
+		if self.maxi_rbm_rate_cps > 10.0:
+			self.hv_allowed_flag = False
+		else:
+			self.hv_allowed_flag = True
+		#self.hv_allowed_flag = self.set_hv_allowed_flag(self.longitude_deg,self.latitude_deg)
 
 		# add to track
 		self.append_ro_track(utc_time)
@@ -157,6 +169,44 @@ class CubeSat():
 
 		plt.savefig("%s.pdf" % foutname_base,bbox_inches='tight')
 
+		fontsize = 8
+		plt.clf()		
+		fig, axes = plt.subplots(6,1,figsize=(4,8))
+		plt.subplots_adjust(hspace=0)
+		plt.tick_params(labelsize=fontsize)
+		i = 0
+		axes[i].plot(self.df["utc_time"],self.df["longitude_deg"])
+		axes[i].set_ylabel("longitude (deg)",fontsize=fontsize)
+		axes[i].set_xticklabels([])
+		#axes[i].xaxis.set_major_locator(mdates.DayLocator(bymonthday=None, interval=7, tz=None))
+		#axes[i].xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+		#axes[i].xaxis.set_minor_locator(mdates.HourLocator(byhour=range(0, 24, 1), tz=None))
+		#axes[i].xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d\n%H:%M:%S"))
+		#axes[i].xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))		
+		i += 1
+		axes[i].plot(self.df["utc_time"],self.df["latitude_deg"])
+		axes[i].set_ylabel("latitude (deg)",fontsize=fontsize)		
+		axes[i].set_xticklabels([])
+		i += 1
+		axes[i].plot(self.df["utc_time"][self.df["sat_elevation_deg"]>0.],self.df["sat_elevation_deg"][self.df["sat_elevation_deg"]>0.])
+		axes[i].set_ylabel("Elevation (deg)",fontsize=fontsize)		
+		axes[i].set_xticklabels([])
+		i += 1
+		axes[i].plot(self.df["utc_time"],self.df["cutoff_rigidity_GV"])
+		axes[i].set_ylabel("Cutoff rigidity(GV)",fontsize=fontsize)		
+		axes[i].set_xticklabels([])
+		i += 1
+		axes[i].plot(self.df["utc_time"],self.df["maxi_rbm_rate_cps"])
+		axes[i].set_ylabel("MAXI RBM (cps)",fontsize=fontsize)		
+		axes[i].set_xticklabels([])	
+		i += 1
+		axes[i].plot(self.df["utc_time"],self.df["hv_allowed_flag"])
+		axes[i].set_ylabel("HV allowed",fontsize=fontsize)		
+		axes[i].xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))		
+
+		fig.align_ylabels(axes)
+		plt.savefig("curve.pdf",bbox_inches='tight')
+
 	def set_cutoff_rigidity_map(self):
 		print("--set_cutoff_rigidity_map")
 		print('file_cutoffrigidity: {}'.format(self.param['file_cutoffrigidity']))
@@ -224,25 +274,105 @@ class CubeSat():
 		j = int(np.digitize(latitude_deg, self.cormap_latitude_edges)) - 1		
 		return(self.cutoff_rigidity_map[i][j])
 
-	def set_maxi_rbm_rate(self):
-		self.maxi_rbm_rate_lst = {}
-		print("maxi_rbm_directory: {}".format(self.param["maxi_rbm_directory"]))
-		for dstfile in glob.glob('%s/dst*.npy' % self.param["maxi_rbm_directory"]):
-			basename = os.path.splitext(os.path.basename(dstfile))[0]
-			print('reading ... {}'.format(basename))
-			self.maxi_rbm_rate_lst[basename] = np.load(dstfile)
-		print(self.maxi_rbm_rate_lst)
-		#healpix(ring,nside=16)
-
-		fig = plt.figure(figsize=(12,8))
-		ax = plt.axes(projection=ccrs.PlateCarree())
-		ax.plot(self.maxi_rbm_rate_lst['dst_h_-223--51'])
-		plt.savefig("maxi_rbm.pdf",bbox_inches='tight')
-
-
 	def set_hvoff_region(self):
 		# https://numpy.org/doc/stable/reference/generated/numpy.histogram2d.html
 		open(self.param["lookuptable_hvoff"])
 
+	def set_maxi_rbm(self):
+		self.maxi_rbm_basename_lst = []
+		self.maxi_rbm_hpx_lst = {}
+		self.maxi_rbm_image_lst = {}
 
+		# theta=latitude, phi=longitude
+		theta, phi = np.meshgrid(np.linspace(0,180, 481), np.linspace(-180, 180, 1441))
+		for dstfile in glob.glob('%s/dst*.npy' % self.param["maxi_rbm_directory"]):
+			basename = os.path.splitext(os.path.basename(dstfile))[0]
+			print('reading ... {}'.format(basename))
+			self.maxi_rbm_basename_lst.append(basename)
+			self.maxi_rbm_hpx_lst[basename] = np.load(dstfile)
+			self.maxi_rbm_image_lst[basename] = hp.pixelfunc.get_interp_val(
+				np.load(dstfile), np.deg2rad(theta), np.deg2rad(phi),
+				nest=False, lonlat=False)[:,::-1]
+			self.maxi_rbm_image_lst[basename][self.maxi_rbm_image_lst[basename]==0] = np.nan
 
+		self.maxi_rbm_selected_basename = self.param["maxi_rbm_selected_basename"]
+
+	def get_maxi_rbm_rate(self,longitude_deg,latitude_deg):
+		rate = hp.pixelfunc.get_interp_val(
+			self.maxi_rbm_hpx_lst[self.maxi_rbm_selected_basename],
+			latitude_deg, longitude_deg,
+			nest=False, lonlat=True)
+		return rate
+
+	def plot_maxi_rbm(self,selected_basename):
+		fig = plt.figure(figsize=(12,8))
+		plt.clf()
+		ax = plt.axes(projection=ccrs.PlateCarree())
+		im = ax.imshow(self.maxi_rbm_image_lst[selected_basename].T,
+			origin="lower",extent=[-180, 180, -90, 90],
+			transform=ccrs.PlateCarree(),
+			cmap="jet",alpha=0.7,norm=LogNorm())
+		cbar=plt.colorbar(im, orientation="horizontal", shrink=0.5, pad=0.1)
+		cbar.set_label("RBM counts s$^{-1}$ [%s]" % selected_basename)
+		ax.set_global()
+		ax.coastlines(linewidth=0.5)
+
+		gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=False,
+			linewidth=1, color='gray', alpha=0.3, linestyle='--')
+		ax.set_xlim(-180.0,180.0)
+		ax.set_ylim(-90.0,90.0)		
+		ax.set_xlabel('Longitude (deg)')
+		ax.set_ylabel('Latitude (deg)')		
+		ax.set_xticks([-180,-120,-60,0,60,120,180])
+		ax.set_yticks([-90,-60,-30,0,30,60,90])	
+
+		outpdf = 'maxi_rbm_%s.pdf' % selected_basename		
+		plt.savefig(outpdf,bbox_inches='tight')
+
+	def define_hv_allowed_region(self):
+		threshold = self.param['hv_allowed_maxi_rbm_threshold']
+
+		self.hv_allowed_region = self.maxi_rbm_image_lst[self.param['maxi_rbm_selected_basename']]
+		self.hv_allowed_region[self.hv_allowed_region<threshold]=True
+		self.hv_allowed_region[self.hv_allowed_region>=threshold]=False
+		self.hv_allowed_region[np.isnan(self.hv_allowed_region)]=False
+
+		fig = plt.figure(figsize=(12,8))
+		plt.clf()
+		ax = plt.axes(projection=ccrs.PlateCarree())	
+		im = ax.imshow(self.hv_allowed_region.T,
+			origin="lower",extent=[-180, 180, -90, 90],
+			transform=ccrs.PlateCarree(),
+			cmap="jet",alpha=0.7)	
+		cbar=plt.colorbar(im, orientation="horizontal",shrink=0.5, ) #, pad=0.025)		
+		ax.set_global()
+		ax.coastlines(linewidth=0.5)		
+		cbar.set_label("0=HV prohibitted (threshold %.2f cps) 1=HV allowed" % threshold)
+		ax.set_global()
+		ax.coastlines(linewidth=0.5)
+
+		gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=False,
+			linewidth=1, color='gray', alpha=0.3, linestyle='--')
+		ax.set_xlim(-180.0,180.0)
+		ax.set_ylim(-90.0,90.0)		
+		ax.set_xlabel('Longitude (deg)')
+		ax.set_ylabel('Latitude (deg)')		
+		ax.set_xticks([-180,-120,-60,0,60,120,180])
+		ax.set_yticks([-90,-60,-30,0,30,60,90])	
+
+		theta, phi = np.meshgrid(np.linspace(-90,90, 481), np.linspace(-180, 180, 1441))
+		ax.contour(phi,theta,self.hv_allowed_region,levels=1,colors=['black'],
+			origin="lower",extent=[-180, 180, -90, 90],
+			linewidth=10,transform=ccrs.PlateCarree())
+
+		outpdf = 'hv_allowed_region.pdf'
+		plt.savefig(outpdf,bbox_inches='tight')
+
+	def set_hv_allowed_flag(self,longitude_deg,latitude_deg):
+		# theta=latitude, phi=longitude	
+		theta = np.linspace(-90,90, 481)
+		phi = np.linspace(-180, 180, 1441)
+		index_theta = np.digitize(latitude_deg, theta)
+		index_phi = np.digitize(longitude_deg, phi)
+		## something strage, HV off region is shifted... shape of the matrix?
+		return self.hv_allowed_region[index_phi][index_theta]

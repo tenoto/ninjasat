@@ -40,8 +40,11 @@ def main(args=None):
 	args = parser.parse_args(args)
 
 	ninjasat = CubeSat(setup_yamlfile=args.setup_yamlfile)
-	ninjasat.set_maxi_rbm_rate()
-	exit()
+	ninjasat.set_maxi_rbm()
+#	for basename in ninjasat.maxi_rbm_basename_lst:
+#		ninjasat.plot_maxi_rbm(basename)	
+	ninjasat.define_hv_allowed_region()
+
 	ninjasat.plot_cutoff_rigidity_map()		
 	ninjasat.plot_orbit(
 		start_date_utc=args.start,
